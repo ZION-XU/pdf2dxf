@@ -1,0 +1,66 @@
+ENTITIES: line 3514 to 238826
+Entity types:
+  LWPOLYLINE: 3041
+  43: 2442
+  HATCH: 1088
+  91: 1088
+  75: 1088
+  76: 1088
+  451: 1088
+  460: 1088
+  462: 1088
+  470: 1088
+  100: 682
+  73: 246
+  ARC: 212
+  MTEXT: 163
+  CIRCLE: 106
+  10: 11
+  SOLID: 3
+  92: 2
+  93: 1
+Layers (44):
+  7
+  70
+  PDF_0
+  PDF_0-新建建构筑物
+  PDF_0-道路边线
+  PDF_0高压线
+  PDF_AXIS
+  PDF_COLU
+  PDF_COLU-HATCH
+  PDF_COLUMN
+  PDF_COLU_GZ
+  PDF_COLU_GZ_HATCH
+  PDF_DIM_LEAD
+  PDF_DM-尺寸标注
+  PDF_DOTE
+  PDF_EVTR
+  PDF_GROUND
+  PDF_HY_BZ_CC
+  PDF_HY_BZ_ZB
+  PDF_KZ-指标符号
+  PDF_LATRINE
+  PDF_LVTRY
+  PDF_PP-COM
+  PDF_PUB_HATCH
+  PDF_REIND
+  PDF_ROAD-CENT
+  PDF_STAIR
+  PDF_TEXT
+  PDF_WALL
+  PDF_WINDOW
+  PDF_WINDOW_TEXT
+  PDF_ZT-二期EPC承包商范围线
+  PDF_c- 现状道路
+  PDF_d-道路中心线
+  PDF_d-道路红线
+  PDF_勘探点
+  PDF_文字
+  PDF_洁具
+  PDF_照明平面导线层
+  PDF_界区
+  PDF_管墩
+  PDF_绿线
+  PDF_螺栓
+  PDF_设备基础

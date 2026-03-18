@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.pyd
+
+build/
+dist/
+
+*.log
+*.dwl
+*.dwl2

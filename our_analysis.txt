@@ -1,0 +1,49 @@
+Our DXF Entity types:
+  LWPOLYLINE: 662
+  10: 628
+  100: 415
+  ARC: 310
+  TEXT: 164
+  HATCH: 147
+  91: 147
+  73: 147
+  75: 147
+  76: 147
+  0: 147
+  62: 98
+  CIRCLE: 73
+Layers (34):
+  0
+  7
+  70
+  PDF_0
+  PDF_0-新建建构筑物
+  PDF_0-道路边线
+  PDF_0高压线
+  PDF_AXIS
+  PDF_COLU-HATCH
+  PDF_COLU_GZ_HATCH
+  PDF_DM-尺寸标注
+  PDF_DOTE
+  PDF_GROUND
+  PDF_HY_BZ_CC
+  PDF_LATRINE
+  PDF_LVTRY
+  PDF_PP-COM
+  PDF_PUB_HATCH
+  PDF_REIND
+  PDF_ROAD-CENT
+  PDF_STAIR
+  PDF_WALL
+  PDF_WINDOW
+  PDF_WINDOW_TEXT
+  PDF_ZT-二期EPC承包商范围线
+  PDF_c- 现状道路
+  PDF_d-道路中心线
+  PDF_d-道路红线
+  PDF_勘探点
+  PDF_洁具
+  PDF_照明平面导线层
+  PDF_界区
+  PDF_绿线
+  PDF_设备基础

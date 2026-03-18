@@ -452,47 +452,6 @@ class PdfToDxfConverter:
             area += point[0] * next_point[1] - next_point[0] * point[1]
         return abs(area) * 0.5
 
-    def _try_collapse_fill_to_line_PLACEHOLDER(self):
-        pass  # placeholder to be removed
-
-    def _should_skip_REMOVED(self):
-        pass  # this method was removed
-        """Skip micro fill shards that PDF generators use around dashed fragments."""
-        if not path.get("fill"):
-            return False
-
-        segments = self._path_line_segments(page, path.get("items", []), y_offset)
-        if len(segments) < 3:
-            return False
-
-        points = self._ordered_loop_points(segments)
-        if len(points) < 3:
-            points = self._dedupe_points([segments[0][0]] + [seg[1] for seg in segments])
-        if len(points) < 3:
-            return False
-
-        xs = [point[0] for point in points]
-        ys = [point[1] for point in points]
-        width = max(xs) - min(xs)
-        height = max(ys) - min(ys)
-        long_dim = max(width, height)
-        short_dim = min(width, height)
-        area = self._polygon_area(points)
-
-        if short_dim <= 0.0:
-            return False
-        aspect_ratio = long_dim / short_dim
-
-        if long_dim <= 1.2 and area <= 0.25:
-            return True
-        if len(points) <= 3 and long_dim <= 2.4 and area <= 0.7:
-            return True
-        if len(points) <= 4 and long_dim <= 2.8 and short_dim <= 0.9 and area <= 1.0 and aspect_ratio <= 4.0:
-            return True
-        if len(points) <= 4 and long_dim <= 3.4 and short_dim <= 1.1 and area <= 1.2 and aspect_ratio <= 2.2:
-            return True
-        return False
-
     def _try_collapse_fill_to_line(self, page, path: dict, attribs: dict,
                                    y_offset: float) -> Optional[dict]:
         """将细长填充多边形折叠为带线宽的中心线。

@@ -294,53 +294,23 @@ class PdfToDxfConverter:
         if not items:
             return
 
-        # 尝试按连通顺序构建边界
-        boundary = []
-        connected = True
-        for item in items:
-            cmd = item[0]
-            if cmd == 'l':
-                s = self._transform_point(page, item[1].x, item[1].y, y_offset)
-                e = self._transform_point(page, item[2].x, item[2].y, y_offset)
-                if not boundary:
-                    boundary.extend([s, e])
-                elif _is_close(boundary[-1], s, 0.5):
-                    boundary.append(e)
-                else:
-                    connected = False
-                    break
-            elif cmd == 'c':
-                s = self._transform_point(page, item[1].x, item[1].y, y_offset)
-                e = self._transform_point(page, item[4].x, item[4].y, y_offset)
-                if not boundary:
-                    boundary.extend([s, e])
-                elif _is_close(boundary[-1], s, 0.5):
-                    boundary.append(e)
-                else:
-                    connected = False
-                    break
-            elif cmd == 're':
-                if boundary:
-                    connected = False
-                    break
-                boundary = self._transform_rect(page, item[1], y_offset)
-            elif cmd == 'qu':
-                if boundary:
-                    connected = False
-                    break
-                boundary = self._transform_quad(page, item[1], y_offset)
-            else:
-                connected = False
-                break
+        item_types = set(item[0] for item in items)
 
-        if connected and boundary:
-            is_closed = _is_close(boundary[0], boundary[-1], 0.5)
-            pts = self._dedupe_points(boundary, 0.25)
-            if len(pts) >= 3 and is_closed:
-                self._create_hatch(msp, pts, path, attribs)
-                return
+        # 矩形/四边形 → 直接构建边界
+        if item_types <= {'re'} and len(items) == 1:
+            pts = self._transform_rect(page, items[0][1], y_offset)
+            pts_d = self._dedupe_points(pts, 0.25)
+            if len(pts_d) >= 3:
+                self._create_hatch(msp, pts_d, path, attribs)
+            return
+        if item_types <= {'qu'} and len(items) == 1:
+            pts = self._transform_quad(page, items[0][1], y_offset)
+            pts_d = self._dedupe_points(pts, 0.25)
+            if len(pts_d) >= 3:
+                self._create_hatch(msp, pts_d, path, attribs)
+            return
 
-        # 降级：收集所有点，按角度排序
+        # 收集所有端点，去重后按角度排序构建凸多边形边界
         all_pts = []
         for item in items:
             cmd = item[0]
@@ -357,13 +327,13 @@ class PdfToDxfConverter:
                 for c in [q.ul, q.ur, q.lr, q.ll]:
                     all_pts.append(self._transform_point(page, c.x, c.y, y_offset))
 
-        unique = self._dedupe_points(all_pts, 0.25)
+        unique = self._dedupe_points(all_pts, 0.1)
         if len(unique) < 3:
             return
         cx = sum(p[0] for p in unique) / len(unique)
         cy = sum(p[1] for p in unique) / len(unique)
         ordered = sorted(unique, key=lambda p: math.atan2(p[1] - cy, p[0] - cx))
-        ordered = self._dedupe_points(ordered, 0.25)
+        ordered = self._dedupe_points(ordered, 0.1)
         if len(ordered) >= 3:
             self._create_hatch(msp, ordered, path, attribs)
 

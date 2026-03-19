@@ -289,7 +289,7 @@ class PdfToDxfConverter:
     # ─── 填充 → HATCH ───
 
     def _emit_hatch(self, page, path, msp, attribs, y_offset):
-        """填充路径 → SOLID HATCH"""
+        """填充路径 → SOLID HATCH（与AutoCAD一致：每个碎片独立EdgePath）"""
         items = path.get("items", [])
         if not items:
             return
@@ -310,7 +310,7 @@ class PdfToDxfConverter:
                 self._create_hatch(msp, pts_d, path, attribs)
             return
 
-        # 收集所有端点，去重后按角度排序构建凸多边形边界
+        # 收集所有端点并全局去重
         all_pts = []
         for item in items:
             cmd = item[0]
@@ -327,18 +327,102 @@ class PdfToDxfConverter:
                 for c in [q.ul, q.ur, q.lr, q.ll]:
                     all_pts.append(self._transform_point(page, c.x, c.y, y_offset))
 
-        unique = self._dedupe_points(all_pts, 0.1)
+        unique = []
+        for p in all_pts:
+            if not any(_is_close(p, u, 0.1) for u in unique):
+                unique.append(p)
         if len(unique) < 3:
             return
+
+        # 尝试粗线矩形检测：8+点配对→中心线+线宽LWPOLYLINE
+        if len(unique) >= 8 and len(unique) % 2 == 0:
+            if self._try_thick_polyline(unique, msp, path, attribs):
+                return
+
+        # 普通碎片填充 → EdgePath+LineEdge HATCH
         cx = sum(p[0] for p in unique) / len(unique)
         cy = sum(p[1] for p in unique) / len(unique)
         ordered = sorted(unique, key=lambda p: math.atan2(p[1] - cy, p[0] - cx))
-        ordered = self._dedupe_points(ordered, 0.1)
-        if len(ordered) >= 3:
-            self._create_hatch(msp, ordered, path, attribs)
+        self._create_hatch_edge(msp, ordered, path, attribs)
+
+    def _try_thick_polyline(self, points, msp, path, attribs):
+        """检测内外角点对 → 中心线+线宽的LWPOLYLINE"""
+        cx = sum(p[0] for p in points) / len(points)
+        cy = sum(p[1] for p in points) / len(points)
+
+        # 按角度排序
+        sorted_pts = sorted(points, key=lambda p: math.atan2(p[1] - cy, p[0] - cx))
+
+        # 贪心配对最近邻
+        n = len(sorted_pts)
+        used = [False] * n
+        pairs = []
+        for i in range(n):
+            if used[i]:
+                continue
+            best_j, best_d = -1, float('inf')
+            for j in range(n):
+                if i == j or used[j]:
+                    continue
+                d = _distance(sorted_pts[i], sorted_pts[j])
+                if d < best_d:
+                    best_d = d
+                    best_j = j
+            if best_j < 0 or best_d > 5.0:
+                return False
+            pairs.append((sorted_pts[i], sorted_pts[best_j], best_d))
+            used[i] = True
+            used[best_j] = True
+
+        if len(pairs) < 4:
+            return False
+
+        # 计算每对的中心点和宽度
+        centers = []
+        widths = []
+        for p1, p2, d in pairs:
+            centers.append(((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2))
+            widths.append(d)
+
+        # 按角度排序中心点（保持对应的宽度）
+        center_angle = [(math.atan2(c[1] - cy, c[0] - cx), c, w) for c, w in zip(centers, widths)]
+        center_angle.sort(key=lambda x: x[0])
+        centers = [ca[1] for ca in center_angle]
+        widths = [ca[2] for ca in center_angle]
+
+        # 创建带线宽的LWPOLYLINE
+        ha = dict(attribs)
+        fill_color = _fitz_color_to_rgb_int(path.get("fill"))
+        if self.preserve_colors and fill_color:
+            ha["color"] = _rgb_to_dxf_color(fill_color)
+        ha.pop("lineweight", None)
+        poly = msp.add_lwpolyline(centers, close=True, dxfattribs=ha)
+        # 设置每个顶点的线宽（start_width = end_width = 对应角点间距）
+        pts_data = []
+        for i, (c, w) in enumerate(zip(centers, widths)):
+            pts_data.append((c[0], c[1], w, w, 0))
+        poly.set_points(pts_data, format='xyseb')
+        poly.close()
+        return True
+
+    def _create_hatch_edge(self, msp, points, path, attribs):
+        """创建 SOLID HATCH - 用EdgePath+LineEdge（与AutoCAD一致）"""
+        if len(points) < 3:
+            return
+        ha = dict(attribs)
+        fill_color = _fitz_color_to_rgb_int(path.get("fill"))
+        if self.preserve_colors and fill_color:
+            ha["color"] = _rgb_to_dxf_color(fill_color)
+        ha.pop("lineweight", None)
+        hatch = msp.add_hatch(dxfattribs=ha)
+        edge_path = hatch.paths.add_edge_path()
+        for i in range(len(points)):
+            p1 = points[i]
+            p2 = points[(i + 1) % len(points)]
+            edge_path.add_line(p1, p2)
 
     def _create_hatch(self, msp, points, path, attribs):
-        """创建 SOLID HATCH 实体"""
+        """创建 SOLID HATCH 实体（polyline边界）"""
         ha = dict(attribs)
         fill_color = _fitz_color_to_rgb_int(path.get("fill"))
         if self.preserve_colors and fill_color:

@@ -59,7 +59,7 @@ def _sample_bezier(p0: tuple, p1: tuple, p2: tuple, p3: tuple,
 
 def detect_arc_from_bezier(
     p0: tuple, p1: tuple, p2: tuple, p3: tuple,
-    tolerance: float = 0.5
+    tolerance: float = 0.2
 ) -> Optional[dict]:
     """
     尝试将一段三次贝塞尔曲线识别为圆弧

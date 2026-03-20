@@ -295,6 +295,12 @@ class PdfToDxfConverter:
         is_closed = len(points) > 2 and _is_close(points[0], points[-1], tolerance)
         if close is not None:
             is_closed = close
+        # 只有 2 点的线段不做去重（保留极短的虚线段等）
+        if len(points) <= 2:
+            if len(points) < 2:
+                return
+            msp.add_lwpolyline(points, close=False, dxfattribs=attribs)
+            return
         pts = self._dedupe_points(points, tolerance)
         if len(pts) < 2:
             return

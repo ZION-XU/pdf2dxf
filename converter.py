@@ -334,13 +334,18 @@ class PdfToDxfConverter:
             has_fill = path.get("fill") is not None
             has_stroke = path.get("color") is not None
 
-            # 填充 → HATCH（AutoCAD行为：有fill时只输出HATCH，不输出描边）
+            # 填充 → HATCH（有 stroke 时 HATCH 用 stroke_color 代替 BYLAYER）
             if has_fill:
-                self._emit_hatch(page, path, msp, base_attribs, y_offset, layer_mgr)
+                hatch_attribs = dict(base_attribs)
+                if has_stroke and self.preserve_colors and stroke_color:
+                    aci = _rgb_to_dxf_color(stroke_color)
+                    layer_color = layer_mgr.get_layer_color(hatch_attribs.get("layer", "0"))
+                    if aci != layer_color:
+                        hatch_attribs["_hatch_color"] = aci
+                self._emit_hatch(page, path, msp, hatch_attribs, y_offset, layer_mgr)
 
             # 仅描边（无填充） → LWPOLYLINE / ARC / CIRCLE
             elif has_stroke:
-                # 描边颜色只在 stroke-only 路径上设置
                 if self.preserve_colors and stroke_color:
                     aci = _rgb_to_dxf_color(stroke_color)
                     layer_color = layer_mgr.get_layer_color(base_attribs.get("layer", "0"))
@@ -455,10 +460,14 @@ class PdfToDxfConverter:
 
         # 创建带线宽的LWPOLYLINE
         ha = dict(attribs)
-        ha.pop("color", None)  # HATCH/填充实体用 BYLAYER
+        hatch_color = ha.pop("_hatch_color", None)
+        ha.pop("color", None)
         ha.pop("lineweight", None)
         poly = msp.add_lwpolyline(centers, close=True, dxfattribs=ha)
-        poly.dxf.discard('color')  # 强制 BYLAYER
+        if hatch_color:
+            poly.dxf.color = hatch_color
+        else:
+            poly.dxf.discard('color')
         # 设置每个顶点的线宽（start_width = end_width = 对应角点间距）
         pts_data = []
         for i, (c, w) in enumerate(zip(centers, widths)):
@@ -472,10 +481,14 @@ class PdfToDxfConverter:
         if len(points) < 3:
             return
         ha = dict(attribs)
-        ha.pop("color", None)  # HATCH 用 BYLAYER
+        hatch_color = ha.pop("_hatch_color", None)
+        ha.pop("color", None)
         ha.pop("lineweight", None)
         hatch = msp.add_hatch(dxfattribs=ha)
-        hatch.dxf.discard('color')  # 强制 BYLAYER
+        if hatch_color:
+            hatch.dxf.color = hatch_color
+        else:
+            hatch.dxf.discard('color')
         edge_path = hatch.paths.add_edge_path()
         for i in range(len(points)):
             p1 = points[i]
@@ -485,10 +498,14 @@ class PdfToDxfConverter:
     def _create_hatch(self, msp, points, path, attribs, layer_mgr=None):
         """创建 SOLID HATCH 实体（polyline边界）"""
         ha = dict(attribs)
-        ha.pop("color", None)  # HATCH 用 BYLAYER
+        hatch_color = ha.pop("_hatch_color", None)
+        ha.pop("color", None)
         ha.pop("lineweight", None)
         hatch = msp.add_hatch(dxfattribs=ha)
-        hatch.dxf.discard('color')  # 强制 BYLAYER
+        if hatch_color:
+            hatch.dxf.color = hatch_color
+        else:
+            hatch.dxf.discard('color')
         hatch.paths.add_polyline_path(points, is_closed=True)
 
     # ─── 描边 → LWPOLYLINE / ARC / CIRCLE ───
@@ -612,7 +629,8 @@ class PdfToDxfConverter:
 
                     bbox = span.get('bbox', [0, 0, 0, 0])
                     font_size = span.get('size', 12)
-                    x, y = self._transform_point(page, bbox[0], bbox[1], y_offset)
+                    # 使用 bbox 底部坐标（y1=bbox[3]）作为文字底线位置
+                    x, y = self._transform_point(page, bbox[0], bbox[3], y_offset)
 
                     color_int = span.get('color', 0)
                     r = (color_int >> 16) & 0xFF
@@ -630,7 +648,7 @@ class PdfToDxfConverter:
                         text_attribs["layer"] = "PDF_文字"
 
                     # 颜色策略：与图层色相同则 BYLAYER
-                    if self.preserve_colors and (r + g + b) > 0:
+                    if self.preserve_colors:
                         aci = _rgb_to_dxf_color((r, g, b))
                         layer_color = layer_mgr.get_layer_color(
                             text_attribs.get("layer", "0"))
@@ -638,7 +656,7 @@ class PdfToDxfConverter:
                             text_attribs['color'] = aci
 
                     mtext = msp.add_mtext(text, dxfattribs=text_attribs)
-                    mtext.set_location(insert=(x, y - font_size))
+                    mtext.set_location(insert=(x, y))
 
     # ─── 图片提取 ───
 

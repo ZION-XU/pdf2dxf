@@ -125,6 +125,7 @@ class PdfToDxfConverter:
     """PDF转DXF转换器"""
 
     STROKE_WIDTH_SCALE = 1.8
+    PDF_PT_TO_MM = 25.4 / 72.0  # PDF点转毫米
 
     def __init__(
         self,
@@ -134,6 +135,7 @@ class PdfToDxfConverter:
         preserve_colors: bool = True,
         extract_images: bool = False,
         page_range: Optional[str] = None,
+        dxf_scale: Optional[float] = None,
     ):
         self.curve_mode = curve_mode
         self.layer_strategy = layer_strategy
@@ -141,6 +143,8 @@ class PdfToDxfConverter:
         self.preserve_colors = preserve_colors
         self.extract_images = extract_images
         self.page_range = page_range
+        # 缩放因子：默认 2.956 匹配 AutoCAD PDF 导入缩放
+        self.dxf_scale = dxf_scale if dxf_scale is not None else 2.956
         self._progress_callback = None
         self._cancel_flag = False
 
@@ -260,7 +264,8 @@ class PdfToDxfConverter:
 
     def _transform_point(self, page, x: float, y: float, y_offset: float = 0.0):
         point = fitz.Point(x, y) * page.rotation_matrix
-        return (float(point.x), float(page.rect.height - point.y + y_offset))
+        s = self.dxf_scale
+        return (float(point.x * s), float((page.rect.height - point.y) * s + y_offset))
 
     def _transform_rect(self, page, rect, y_offset: float):
         """矩形 → 5个点的闭合多边形"""
@@ -648,7 +653,7 @@ class PdfToDxfConverter:
                     b = color_int & 0xFF
 
                     extra = {
-                        'char_height': font_size * 0.35,
+                        'char_height': font_size * 0.35 * self.dxf_scale,
                         'style': 'CHINESE',
                         'attachment_point': 7,
                     }
@@ -731,6 +736,7 @@ def convert_pdf_to_dxf(
     preserve_colors: bool = True,
     extract_images: bool = False,
     page_range: str = None,
+    dxf_scale: float = None,
     progress_callback=None,
 ) -> str:
     converter = PdfToDxfConverter(
@@ -740,6 +746,7 @@ def convert_pdf_to_dxf(
         preserve_colors=preserve_colors,
         extract_images=extract_images,
         page_range=page_range,
+        dxf_scale=dxf_scale,
     )
     if progress_callback:
         converter.set_progress_callback(progress_callback)

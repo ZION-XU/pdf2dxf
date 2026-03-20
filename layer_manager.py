@@ -32,6 +32,7 @@ class LayerManager:
         self.doc = doc
         self.strategy = strategy
         self._created_layers: set = set()
+        self._layer_colors: dict = {}  # layer_name -> color_index
 
     def _ensure_layer(self, name: str, color: int = COLOR_WHITE):
         """确保图层存在"""
@@ -41,6 +42,11 @@ class LayerManager:
             except ezdxf.DXFTableEntryError:
                 pass  # 图层已存在
             self._created_layers.add(name)
+            self._layer_colors[name] = color
+
+    def get_layer_color(self, name: str) -> int:
+        """获取图层颜色索引"""
+        return self._layer_colors.get(name, COLOR_WHITE)
 
     def get_layer_name(self, content_type: str, page_num: int) -> str:
         """

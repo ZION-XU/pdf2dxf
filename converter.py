@@ -33,20 +33,59 @@ from layer_manager import LayerManager
 #  工具函数
 # ═══════════════════════════════════════════════════════════════
 
+# 完整 ACI 256 色表（索引 → RGB）
+_ACI_TABLE = {
+    1: (255,0,0), 2: (255,255,0), 3: (0,255,0), 4: (0,255,255),
+    5: (0,0,255), 6: (255,0,255), 7: (255,255,255),
+    8: (128,128,128), 9: (192,192,192),
+    10: (255,0,0), 11: (255,127,127), 12: (204,0,0), 13: (204,102,102),
+    14: (153,0,0), 15: (153,76,76), 16: (127,0,0), 17: (127,63,63),
+    18: (76,0,0), 19: (76,38,38),
+    20: (255,63,0), 21: (255,159,127), 22: (204,51,0), 23: (204,127,102),
+    24: (153,38,0), 25: (153,95,76), 26: (127,31,0), 27: (127,79,63),
+    28: (76,19,0), 29: (76,47,38),
+    30: (255,127,0), 31: (255,191,127), 32: (204,102,0), 33: (204,153,102),
+    34: (153,76,0), 35: (153,114,76), 36: (127,63,0), 37: (127,95,63),
+    38: (76,38,0), 39: (76,57,38),
+    40: (255,191,0), 41: (255,223,127), 42: (204,153,0), 43: (204,178,102),
+    44: (153,114,0), 45: (153,133,76), 46: (127,95,0), 47: (127,111,63),
+    48: (76,57,0), 49: (76,66,38),
+    50: (255,255,0), 51: (255,255,127), 52: (204,204,0), 53: (204,204,102),
+    54: (153,153,0), 55: (153,153,76), 56: (127,127,0), 57: (127,127,63),
+    58: (76,76,0), 59: (76,76,38),
+    60: (191,255,0), 61: (223,255,127), 62: (153,204,0), 63: (178,204,102),
+    70: (127,255,0), 71: (191,255,127), 72: (102,204,0), 73: (153,204,102),
+    80: (63,255,0), 81: (159,255,127), 82: (51,204,0), 83: (127,204,102),
+    90: (0,255,0), 91: (127,255,127), 92: (0,204,0), 93: (102,204,102),
+    100: (0,255,63), 101: (127,255,159), 102: (0,204,51), 103: (102,204,127),
+    110: (0,255,127), 111: (127,255,191), 112: (0,204,102), 113: (102,204,153),
+    120: (0,255,191), 121: (127,255,223), 122: (0,204,153), 123: (102,204,178),
+    130: (0,255,255), 131: (127,255,255), 132: (0,204,204), 133: (102,204,204),
+    140: (0,191,255), 141: (127,223,255), 142: (0,153,204), 143: (102,178,204),
+    150: (0,127,255), 151: (127,191,255), 152: (0,102,204), 153: (102,153,204),
+    160: (0,63,255), 161: (127,159,255), 162: (0,51,204), 163: (102,127,204),
+    170: (0,0,255), 171: (127,127,255), 172: (0,0,204), 173: (102,102,204),
+    180: (63,0,255), 181: (159,127,255), 182: (51,0,204), 183: (127,102,204),
+    190: (127,0,255), 191: (191,127,255), 192: (102,0,204), 193: (153,102,204),
+    200: (191,0,255), 201: (223,127,255), 202: (153,0,204), 203: (178,102,204),
+    210: (255,0,255), 211: (255,127,255), 212: (204,0,204), 213: (204,102,204),
+    220: (255,0,191), 221: (255,127,223), 222: (204,0,153), 223: (204,102,178),
+    230: (255,0,127), 231: (255,127,191), 232: (204,0,102), 233: (204,102,153),
+    240: (255,0,63), 241: (255,127,159), 242: (204,0,51), 243: (204,102,127),
+    250: (51,51,51), 251: (91,91,91), 252: (132,132,132),
+    253: (173,173,173), 254: (214,214,214), 255: (242,242,242),
+}
+
+
 def _rgb_to_dxf_color(rgb: tuple) -> int:
-    """将RGB颜色映射到最接近的DXF颜色索引(1-7)"""
+    """将RGB颜色映射到最接近的DXF ACI颜色索引(1-255)"""
     if rgb is None or len(rgb) < 3:
         return 7
     r, g, b = rgb[0], rgb[1], rgb[2]
-    colors = {
-        1: (255, 0, 0), 2: (255, 255, 0), 3: (0, 255, 0),
-        4: (0, 255, 255), 5: (0, 0, 255), 6: (255, 0, 255),
-        7: (255, 255, 255),
-    }
     if r + g + b < 30:
         return 7
     best, min_dist = 7, float('inf')
-    for idx, (cr, cg, cb) in colors.items():
+    for idx, (cr, cg, cb) in _ACI_TABLE.items():
         dist = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2
         if dist < min_dist:
             min_dist = dist
@@ -179,10 +218,26 @@ class PdfToDxfConverter:
     # ─── 图层与线型 ───
 
     def _build_ocg_layer_maps(self, doc, page, layer_mgr: LayerManager):
+        """构建 PDF OCG 图层映射，统计主要描边色作为图层颜色"""
+        layer_color_stats = {}  # layer_name -> {aci_color: count}
         for path in page.get_drawings():
             name = path.get('layer')
-            if name:
-                layer_mgr.create_pdf_layer(f"PDF_{name}")
+            if not name:
+                continue
+            dxf_layer = f"PDF_{name}"
+            if dxf_layer not in layer_color_stats:
+                layer_color_stats[dxf_layer] = {}
+            stroke_color = _fitz_color_to_rgb_int(path.get('color'))
+            if stroke_color:
+                aci = _rgb_to_dxf_color(stroke_color)
+                layer_color_stats[dxf_layer][aci] = layer_color_stats[dxf_layer].get(aci, 0) + 1
+
+        for dxf_layer, color_counts in layer_color_stats.items():
+            if color_counts:
+                dominant_color = max(color_counts, key=color_counts.get)
+            else:
+                dominant_color = 7
+            layer_mgr.create_pdf_layer(dxf_layer, color=dominant_color)
 
     def _ensure_linetypes(self, dwg):
         definitions = {
@@ -265,9 +320,8 @@ class PdfToDxfConverter:
                 if pdf_layer:
                     base_attribs["layer"] = f"PDF_{pdf_layer}"
 
+            # 颜色策略：与图层色相同则 BYLAYER，不同则设具体色
             stroke_color = _fitz_color_to_rgb_int(path.get("color"))
-            if self.preserve_colors and stroke_color:
-                base_attribs["color"] = _rgb_to_dxf_color(stroke_color)
 
             width = path.get("width", 0)
             if width > 0:
@@ -279,16 +333,22 @@ class PdfToDxfConverter:
 
             # 填充 → HATCH（AutoCAD行为：有fill时只输出HATCH，不输出描边）
             if has_fill:
-                self._emit_hatch(page, path, msp, base_attribs, y_offset)
+                self._emit_hatch(page, path, msp, base_attribs, y_offset, layer_mgr)
 
             # 仅描边（无填充） → LWPOLYLINE / ARC / CIRCLE
             elif has_stroke:
+                # 描边颜色只在 stroke-only 路径上设置
+                if self.preserve_colors and stroke_color:
+                    aci = _rgb_to_dxf_color(stroke_color)
+                    layer_color = layer_mgr.get_layer_color(base_attribs.get("layer", "0"))
+                    if aci != layer_color:
+                        base_attribs["color"] = aci
                 self._emit_stroke(page, path, msp, base_attribs,
                                   page_height, y_offset)
 
     # ─── 填充 → HATCH ───
 
-    def _emit_hatch(self, page, path, msp, attribs, y_offset):
+    def _emit_hatch(self, page, path, msp, attribs, y_offset, layer_mgr=None):
         """填充路径 → SOLID HATCH（与AutoCAD一致：每个碎片独立EdgePath）"""
         items = path.get("items", [])
         if not items:
@@ -301,13 +361,13 @@ class PdfToDxfConverter:
             pts = self._transform_rect(page, items[0][1], y_offset)
             pts_d = self._dedupe_points(pts, 0.25)
             if len(pts_d) >= 3:
-                self._create_hatch(msp, pts_d, path, attribs)
+                self._create_hatch(msp, pts_d, path, attribs, layer_mgr)
             return
         if item_types <= {'qu'} and len(items) == 1:
             pts = self._transform_quad(page, items[0][1], y_offset)
             pts_d = self._dedupe_points(pts, 0.25)
             if len(pts_d) >= 3:
-                self._create_hatch(msp, pts_d, path, attribs)
+                self._create_hatch(msp, pts_d, path, attribs, layer_mgr)
             return
 
         # 收集所有端点并全局去重
@@ -336,16 +396,16 @@ class PdfToDxfConverter:
 
         # 尝试粗线矩形检测：8+点配对→中心线+线宽LWPOLYLINE
         if len(unique) >= 8 and len(unique) % 2 == 0:
-            if self._try_thick_polyline(unique, msp, path, attribs):
+            if self._try_thick_polyline(unique, msp, path, attribs, layer_mgr):
                 return
 
         # 普通碎片填充 → EdgePath+LineEdge HATCH
         cx = sum(p[0] for p in unique) / len(unique)
         cy = sum(p[1] for p in unique) / len(unique)
         ordered = sorted(unique, key=lambda p: math.atan2(p[1] - cy, p[0] - cx))
-        self._create_hatch_edge(msp, ordered, path, attribs)
+        self._create_hatch_edge(msp, ordered, path, attribs, layer_mgr)
 
-    def _try_thick_polyline(self, points, msp, path, attribs):
+    def _try_thick_polyline(self, points, msp, path, attribs, layer_mgr=None):
         """检测内外角点对 → 中心线+线宽的LWPOLYLINE"""
         cx = sum(p[0] for p in points) / len(points)
         cy = sum(p[1] for p in points) / len(points)
@@ -392,11 +452,10 @@ class PdfToDxfConverter:
 
         # 创建带线宽的LWPOLYLINE
         ha = dict(attribs)
-        fill_color = _fitz_color_to_rgb_int(path.get("fill"))
-        if self.preserve_colors and fill_color:
-            ha["color"] = _rgb_to_dxf_color(fill_color)
+        ha.pop("color", None)  # HATCH/填充实体用 BYLAYER
         ha.pop("lineweight", None)
         poly = msp.add_lwpolyline(centers, close=True, dxfattribs=ha)
+        poly.dxf.discard('color')  # 强制 BYLAYER
         # 设置每个顶点的线宽（start_width = end_width = 对应角点间距）
         pts_data = []
         for i, (c, w) in enumerate(zip(centers, widths)):
@@ -405,30 +464,28 @@ class PdfToDxfConverter:
         poly.close()
         return True
 
-    def _create_hatch_edge(self, msp, points, path, attribs):
+    def _create_hatch_edge(self, msp, points, path, attribs, layer_mgr=None):
         """创建 SOLID HATCH - 用EdgePath+LineEdge（与AutoCAD一致）"""
         if len(points) < 3:
             return
         ha = dict(attribs)
-        fill_color = _fitz_color_to_rgb_int(path.get("fill"))
-        if self.preserve_colors and fill_color:
-            ha["color"] = _rgb_to_dxf_color(fill_color)
+        ha.pop("color", None)  # HATCH 用 BYLAYER
         ha.pop("lineweight", None)
         hatch = msp.add_hatch(dxfattribs=ha)
+        hatch.dxf.discard('color')  # 强制 BYLAYER
         edge_path = hatch.paths.add_edge_path()
         for i in range(len(points)):
             p1 = points[i]
             p2 = points[(i + 1) % len(points)]
             edge_path.add_line(p1, p2)
 
-    def _create_hatch(self, msp, points, path, attribs):
+    def _create_hatch(self, msp, points, path, attribs, layer_mgr=None):
         """创建 SOLID HATCH 实体（polyline边界）"""
         ha = dict(attribs)
-        fill_color = _fitz_color_to_rgb_int(path.get("fill"))
-        if self.preserve_colors and fill_color:
-            ha["color"] = _rgb_to_dxf_color(fill_color)
+        ha.pop("color", None)  # HATCH 用 BYLAYER
         ha.pop("lineweight", None)
         hatch = msp.add_hatch(dxfattribs=ha)
+        hatch.dxf.discard('color')  # 强制 BYLAYER
         hatch.paths.add_polyline_path(points, is_closed=True)
 
     # ─── 描边 → LWPOLYLINE / ARC / CIRCLE ───
@@ -564,10 +621,16 @@ class PdfToDxfConverter:
                         'style': 'CHINESE',
                         'attachment_point': 7,
                     }
-                    if self.preserve_colors and (r + g + b) > 0:
-                        extra['color'] = _rgb_to_dxf_color((r, g, b))
-
                     text_attribs = layer_mgr.get_dxf_attribs("text", page_num, extra)
+
+                    # 颜色策略：与图层色相同则 BYLAYER
+                    if self.preserve_colors and (r + g + b) > 0:
+                        aci = _rgb_to_dxf_color((r, g, b))
+                        layer_color = layer_mgr.get_layer_color(
+                            text_attribs.get("layer", "0"))
+                        if aci != layer_color:
+                            text_attribs['color'] = aci
+
                     mtext = msp.add_mtext(text, dxfattribs=text_attribs)
                     mtext.set_location(insert=(x, y - font_size))
 

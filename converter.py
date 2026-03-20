@@ -629,8 +629,12 @@ class PdfToDxfConverter:
 
                     bbox = span.get('bbox', [0, 0, 0, 0])
                     font_size = span.get('size', 12)
-                    # 使用 bbox 底部坐标（y1=bbox[3]）作为文字底线位置
-                    x, y = self._transform_point(page, bbox[0], bbox[3], y_offset)
+                    # 使用 origin（文字基线原点）定位，比 bbox 更精确
+                    origin = span.get('origin')
+                    if origin:
+                        x, y = self._transform_point(page, origin[0], origin[1], y_offset)
+                    else:
+                        x, y = self._transform_point(page, bbox[0], bbox[1], y_offset)
 
                     color_int = span.get('color', 0)
                     r = (color_int >> 16) & 0xFF

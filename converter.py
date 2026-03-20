@@ -239,6 +239,9 @@ class PdfToDxfConverter:
                 dominant_color = 7
             layer_mgr.create_pdf_layer(dxf_layer, color=dominant_color)
 
+        # AutoCAD 把 PDF 文字统一放到 PDF_文字 图层
+        layer_mgr.create_pdf_layer("PDF_文字", color=5)
+
     def _ensure_linetypes(self, dwg):
         definitions = {
             "DASHED": [0.6, 0.5, -0.1],
@@ -288,7 +291,7 @@ class PdfToDxfConverter:
             unique.pop()
         return unique
 
-    def _add_polyline(self, msp, points, attribs, tolerance=1.0, close=None):
+    def _add_polyline(self, msp, points, attribs, tolerance=0.01, close=None):
         is_closed = len(points) > 2 and _is_close(points[0], points[-1], tolerance)
         if close is not None:
             is_closed = close
@@ -518,13 +521,13 @@ class PdfToDxfConverter:
                     line_pts.append(e)
                 else:
                     # 不连通，输出当前链，开始新链
-                    self._add_polyline(msp, line_pts, attribs, tolerance=0.5)
+                    self._add_polyline(msp, line_pts, attribs)
                     line_pts = [s, e]
 
             elif cmd == 'c':
                 # 遇到曲线 → 先刷新线段链
                 if line_pts:
-                    self._add_polyline(msp, line_pts, attribs, tolerance=0.5)
+                    self._add_polyline(msp, line_pts, attribs)
                     line_pts = []
 
                 c0 = self._transform_point(page, item[1].x, item[1].y, y_offset)
@@ -535,7 +538,7 @@ class PdfToDxfConverter:
 
             elif cmd == 're':
                 if line_pts:
-                    self._add_polyline(msp, line_pts, attribs, tolerance=0.5)
+                    self._add_polyline(msp, line_pts, attribs)
                     line_pts = []
                 if curves:
                     self._flush_curves(curves, msp, attribs, page_height, y_offset)
@@ -544,7 +547,7 @@ class PdfToDxfConverter:
 
             elif cmd == 'qu':
                 if line_pts:
-                    self._add_polyline(msp, line_pts, attribs, tolerance=0.5)
+                    self._add_polyline(msp, line_pts, attribs)
                     line_pts = []
                 if curves:
                     self._flush_curves(curves, msp, attribs, page_height, y_offset)
@@ -553,7 +556,7 @@ class PdfToDxfConverter:
 
         # 刷新尾部
         if line_pts:
-            self._add_polyline(msp, line_pts, attribs, tolerance=0.5)
+            self._add_polyline(msp, line_pts, attribs)
         if curves:
             self._flush_curves(curves, msp, attribs, page_height, y_offset)
 
@@ -622,6 +625,9 @@ class PdfToDxfConverter:
                         'attachment_point': 7,
                     }
                     text_attribs = layer_mgr.get_dxf_attribs("text", page_num, extra)
+                    # PDF 策略下文字放入 PDF_文字 图层（与 AutoCAD 一致）
+                    if self.layer_strategy == LAYER_STRATEGY_PDF:
+                        text_attribs["layer"] = "PDF_文字"
 
                     # 颜色策略：与图层色相同则 BYLAYER
                     if self.preserve_colors and (r + g + b) > 0:
